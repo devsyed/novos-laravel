@@ -14,6 +14,27 @@ use App\Models\File;
 
 class TextFilesController extends Controller
 {
+
+    public function index(Request $request): JsonResponse
+    {
+        $filesystemFiles = Storage::files('novos-text-files');
+        $databaseFiles = File::all();
+
+        $mergedFiles = $databaseFiles->map(function ($databaseFile) use ($filesystemFiles) {
+            $existsInFilesystem = in_array('novos-text-files/' . $databaseFile->file_name, $filesystemFiles);
+            return [
+                'fileName' => $databaseFile->file_name,
+                'refName' => $databaseFile->ref_name,
+                'file_created_at' => $databaseFile->created_at,
+                'existsInFilesystem' => $existsInFilesystem
+            ];
+        });
+
+        return NovosResponseFormatter::formatSuccess($mergedFiles->toArray(), 200);
+
+    }
+
+
     public function createFile(Request $request): JsonResponse
     {
         try {
@@ -49,6 +70,7 @@ class TextFilesController extends Controller
 
     public function getFile(Request $request, string $fileName): JsonResponse
     {
+        
         try {
             $file = File::where('ref_name', $fileName)->first();
             $fileContents = Storage::get('novos-text-files/' . $fileName);
@@ -79,22 +101,25 @@ class TextFilesController extends Controller
 
     public function getContents(Request $request): String
     {
-        $cachedContents = Cache::get('novos_content');
-        if ($cachedContents !== null) {
-            return $cachedContents;
-        }
-    
+        
         $files = Storage::files('novos-text-files/');
-        $allFilesContents = [];
+        $txtFiles = [];
 
         foreach ($files as $file) {
+            if (pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+                $txtFiles[] = $file;
+            }
+        }
 
+        if (empty($txtFiles)) {
+            return '';
+        }
+        foreach ($txtFiles as $file) {
             $fileContents = Storage::get($file);
             $allFilesContents[] = $fileContents;
         }
 
-        // assuming new files are not added before every hour. 
-        Cache::put('novos_content', $allFilesContents, now()->addHour());
+       
         return implode(',',$allFilesContents);
     }
 }
